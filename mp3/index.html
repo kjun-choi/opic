@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+  <title>OPIc 출퇴근 영어 플레이어</title>
+  <style>
+    :root { --bg: #0f172a; --card: #1e293b; --accent: #38bdf8; --text: #f8fafc; --muted: #94a3b8; }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); padding: 16px 16px 160px; }
+    h1 { font-size: 1.25rem; margin: 0 0 4px; }
+    .sub { color: var(--muted); font-size: 0.85rem; margin-bottom: 16px; }
+    .track-list { display: flex; flex-direction: column; gap: 8px; }
+    .track { display: flex; align-items: center; justify-content: space-between; background: var(--card); padding: 14px 16px; border-radius: 12px; cursor: pointer; border: 1px solid transparent; transition: 0.15s; }
+    .track.active { border-color: var(--accent); background: #1e3a5f; }
+    .track-title { font-weight: 600; font-size: 1rem; }
+    .track-sub { font-size: 0.8rem; color: var(--muted); margin-top: 2px; }
+    .dl { color: var(--muted); text-decoration: none; font-size: 0.85rem; padding: 6px 10px; border-radius: 8px; background: rgba(255,255,255,0.06); }
+    .player-bar { position: fixed; bottom: 0; left: 0; right: 0; background: #111827; border-top: 1px solid #334155; padding: 12px 16px 18px; }
+    .now { font-size: 0.9rem; font-weight: 600; margin-bottom: 8px; color: var(--accent); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    audio { width: 100%; height: 40px; }
+    .controls { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+    button { background: var(--card); color: var(--text); border: 1px solid #334155; border-radius: 8px; padding: 8px 12px; font-size: 0.85rem; cursor: pointer; flex: 1; }
+    button.on { border-color: var(--accent); color: var(--accent); }
+  </style>
+</head>
+<body>
+  <h1>🎧 OPIc 출퇴근 플레이어</h1>
+  <div class="sub">트랙을 누르면 순서대로 자동 재생됩니다 (화면 꺼짐 / 블루투스 지원)</div>
+  <div class="track-list" id="list"></div>
+
+  <div class="player-bar">
+    <div class="now" id="nowPlaying">트랙을 선택하세요</div>
+    <audio id="audio" controls playsinline></audio>
+    <div class="controls">
+      <button onclick="prevTrack()">⏮ 이전</button>
+      <button onclick="nextTrack()">⏭ 다음</button>
+      <button id="repeatBtn" onclick="toggleRepeat()">🔁 전체반복</button>
+      <button id="speedBtn" onclick="cycleSpeed()">⚡ 1.0x</button>
+    </div>
+  </div>
+
+  <script>
+    const tracks = [{"file": "00.filler_readable.mp3", "title": "00.filler_readable", "subtitle": "Essential Filler Expressions"}, {"file": "01.집.mp3", "title": "01.집", "subtitle": "Topic 1. Home"}, {"file": "02.공연.mp3", "title": "02.공연", "subtitle": "Topic 2. Concerts"}, {"file": "03.공원가기.mp3", "title": "03.공원가기", "subtitle": "Topic 3. Going to the Park"}, {"file": "04.국내 여행.mp3", "title": "04.국내 여행", "subtitle": "Topic 4. Domestic Travel"}, {"file": "05.해외 여행.mp3", "title": "05.해외 여행", "subtitle": "Topic 5. Overseas Travel"}, {"file": "06.음악감상.mp3", "title": "06.음악감상", "subtitle": "Topic 6. Listening to Music"}, {"file": "07.모임.mp3", "title": "07.모임", "subtitle": "Topic 7. Gatherings"}, {"file": "08.미용실.mp3", "title": "08.미용실", "subtitle": "Topic 8. Hair Salon"}, {"file": "09.영화.mp3", "title": "09.영화", "subtitle": "Topic 9. Movies"}, {"file": "10.날씨.mp3", "title": "10.날씨", "subtitle": "Topic 10. Weather"}, {"file": "11.교통.mp3", "title": "11.교통", "subtitle": "Topic 11. Transportation"}, {"file": "12.재활용.mp3", "title": "12.재활용", "subtitle": "Topic 12. Recycling"}, {"file": "13.지형.mp3", "title": "13.지형", "subtitle": "Topic 13. Geography"}, {"file": "14.패션.mp3", "title": "14.패션", "subtitle": "Topic 14. Fashion"}];
+    const audio = document.getElementById("audio");
+    const listEl = document.getElementById("list");
+    const nowEl = document.getElementById("nowPlaying");
+    const repeatBtn = document.getElementById("repeatBtn");
+    const speedBtn = document.getElementById("speedBtn");
+
+    let current = 0;
+    let repeatMode = "all"; // "all" | "one"
+    const speeds = [0.85, 0.9, 1.0, 1.1, 1.2];
+    let speedIdx = 2;
+
+    function render() {
+      listEl.innerHTML = "";
+      tracks.forEach((t, idx) => {
+        const div = document.createElement("div");
+        div.className = "track" + (idx === current ? " active" : "");
+        div.innerHTML = `
+          <div>
+            <div class="track-title">${t.title}</div>
+            <div class="track-sub">${t.subtitle}</div>
+          </div>
+          <a class="dl" href="${encodeURIComponent(t.file)}" download onclick="event.stopPropagation()">저장</a>
+        `;
+        div.onclick = () => playTrack(idx);
+        listEl.appendChild(div);
+      });
+    }
+
+    function playTrack(idx) {
+      if (!tracks.length) return;
+      current = (idx + tracks.length) % tracks.length;
+      const t = tracks[current];
+      audio.src = encodeURIComponent(t.file);
+      audio.playbackRate = speeds[speedIdx];
+      audio.play().catch(() => {});
+      nowEl.textContent = `▶ ${t.title} — ${t.subtitle}`;
+      render();
+      if ("mediaSession" in navigator) {
+        navigator.mediaSession.metadata = new MediaMetadata({
+          title: t.title,
+          artist: "OPIc Scripts",
+          album: t.subtitle,
+        });
+        navigator.mediaSession.setActionHandler("previoustrack", prevTrack);
+        navigator.mediaSession.setActionHandler("nexttrack", nextTrack);
+      }
+    }
+
+    function nextTrack() { playTrack(current + 1); }
+    function prevTrack() { playTrack(current - 1); }
+
+    function toggleRepeat() {
+      repeatMode = repeatMode === "all" ? "one" : "all";
+      repeatBtn.textContent = repeatMode === "one" ? "🔂 한곡반복" : "🔁 전체반복";
+      repeatBtn.classList.toggle("on", repeatMode === "one");
+    }
+
+    function cycleSpeed() {
+      speedIdx = (speedIdx + 1) % speeds.length;
+      audio.playbackRate = speeds[speedIdx];
+      speedBtn.textContent = `⚡ ${speeds[speedIdx].toFixed(2).replace(/0$/, "")}x`;
+    }
+
+    audio.addEventListener("ended", () => {
+      if (repeatMode === "one") {
+        audio.currentTime = 0;
+        audio.play();
+      } else {
+        nextTrack();
+      }
+    });
+
+    render();
+    if (tracks.length) {
+      audio.src = encodeURIComponent(tracks[0].file);
+      nowEl.textContent = `${tracks[0].title} — ${tracks[0].subtitle}`;
+    }
+  </script>
+</body>
+</html>
